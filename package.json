@@ -1,0 +1,23 @@
+{
+  "name": "stringify-structured",
+  "version": "0.0.1",
+  "description": "A generalized stringification algorithm for diagnostic purposes",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm run test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/microvium/stringify-structured.git"
+  },
+  "keywords": [
+    "stringify",
+    "js"
+  ],
+  "author": "Michael Hunter",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/microvium/stringify-structured/issues"
+  },
+  "homepage": "https://github.com/microvium/stringify-structured#readme"
+}
