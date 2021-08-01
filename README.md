@@ -7,6 +7,7 @@ A customizable stringification algorithm for tree-structured data (e.g. object g
     - Sets
     - `undefined`
   - Automatically detects circular references
+  - Produces stable ordering for maps, sets, and objects
   - Lighter-weight output than JSON (less syntactic noise by default).
     - Tries not to quote keys in objects. I.e. `{ a: 1 }` instead of `{ "a": 1 }`
     - Uses single quotes instead of double quotes for strings
@@ -14,7 +15,11 @@ A customizable stringification algorithm for tree-structured data (e.g. object g
   - **Easy to customize** the output syntax of individual values in the tree in-place (without needing a "replacer function")
   - Opinionated wrapping and indentation rules (tries to fill up a given output width instead of putting everything on a new line)
 
-The customization is a key reason why I created this library. You can easily `stringify` a POD structure to get a dump of its contents (e.g. for debug output or unit test artifacts), and then you can _incrementally_ customize how certain values are displayed to improve the output structure over time.
+The customization is a key reason why I created this library. You can start out using `stringify` directly on a POD structure to get a dump of its contents (e.g. for debug output or unit test artifacts), and then you can _incrementally_ customize how certain values are displayed to improve the output structure over time.
+
+Limitations:
+
+  - This library is not intended to express output syntax where whitespace is significant, since all line breaks are considered optional and whitespace around line breaks can be automatically trimmed. It's better suited to JSON-like output syntaxes where line breaks can be used purely for readability but do not affect semantics.
 
 ## Basic Usage
 
@@ -78,7 +83,7 @@ parent(
 
 `block` introduces implicit wrap points after each literal string and each interpolated value. (See section on wrapping rules later in this doc).
 
-## Customization: `list(joiner, [items])`
+## Customization: `list(joiner, [items], { sort?: boolean }?)`
 
 A `list` allows you to define multiple children for a block.
 
@@ -127,6 +132,8 @@ parent(
 ```
 
 `list` introduces implicit wrap points after each item (after the joiner).
+
+Using the list with the `sort: true` option will cause the list to be sorted lexicographically in the output, which is a simple way to produce deterministic/stable output when the list items do not have an inherent order (e.g. a list of items in a `Set`).
 
 ## Customization: `inline`
 

@@ -177,12 +177,12 @@ describe('array', function() {
 
 describe('object', function() {
   it('object', function() {
-    const obj = { a: 1, '#b': 2, c: 3 };
-    assert.strictEqual(stringify(obj), "{ a: 1, '#b': 2, c: 3 }");
+    const obj = { '#a': 1, b: 2, c: 3 };
+    assert.strictEqual(stringify(obj), "{ '#a': 1, b: 2, c: 3 }");
     assert.strictEqual(stringifyIndented(obj),
       `{
-        a: 1,
-        '#b': 2,
+        '#a': 1,
+        b: 2,
         c: 3
       }`);
   });
@@ -203,12 +203,12 @@ describe('set', function() {
 
 describe('map', function() {
   it('map', function() {
-    const obj = new Map(Object.entries({ a: 1, '#b': 2, c: 3 }));
-    assert.strictEqual(stringify(obj), "Map { a: 1, '#b': 2, c: 3 }");
+    const obj = new Map(Object.entries({ '#a': 1, b: 2, c: 3 }));
+    assert.strictEqual(stringify(obj), "Map { '#a': 1, b: 2, c: 3 }");
     assert.strictEqual(stringifyIndented(obj),
       `Map {
-        a: 1,
-        '#b': 2,
+        '#a': 1,
+        b: 2,
         c: 3
       }`);
   });
@@ -270,3 +270,21 @@ describe('partial wrapping', function() {
       `[[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]]`);
   });
 });
+
+describe('stable ordering', function() {
+  it('set', function() {
+    const set1 = new Set([1, 2, 3]);
+    const set2 = new Set([3, 2, 1]);
+    assert.strictEqual(stringify(set1), stringify(set2));
+  })
+  it('object', function() {
+    const obj1 = { a: 1, b: 2, c: 3 };
+    const obj2 = { c: 3, b: 2, a: 1 };
+    assert.strictEqual(stringify(obj1), stringify(obj2));
+  })
+  it('map', function() {
+    const map1 = new Map([['a', 1], ['b', 2], ['c', 3]]);
+    const map2 = new Map([['c', 3], ['b', 2], ['a', 1]]);
+    assert.strictEqual(stringify(map1), stringify(map2));
+  })
+})

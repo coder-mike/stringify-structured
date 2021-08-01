@@ -123,7 +123,8 @@ function objectLike(keyValuePairs: Iterable<any[]>): Stringifiable {
         text`${stringifyKey(k)}`
       }: ${
         v
-      }`)
+      }`),
+      { sort: true }
     )
   } }`;
 }
@@ -287,13 +288,16 @@ export function inline(strings: TemplateStringsArray, ...interpolations: any[]):
   return result;
 }
 
-export function list(joiner: string, items: Iterable<any>): Stringifiable {
+export function list(joiner: string, items: Iterable<any>, opts?: { sort?: boolean }): Stringifiable {
   const result: Stringifiable = {
     toString: opts => stringify(result, opts),
     [stringifySymbol](params): RenderResult {
       const { wrapWidth, render, indent } = params;
 
       const renderedItems = [...items].map(x => render(x, params));
+      if (opts?.sort) {
+        renderedItems.sort((a, b) => a.content > b.content ? 1 : a.content === b.content ? 0 : -1);
+      }
 
       const singleLineLength =
         sum(renderedItems.map(x => x.content.length)) +
@@ -365,7 +369,7 @@ export function defaultFormatter(value: any): Stringifiable {
       }
 
       if (value instanceof Set) {
-        return block`Set [${list(', ', value)}]`;
+        return block`Set [${list(', ', value, { sort: true })}]`;
       }
 
       if (value instanceof Map) {
