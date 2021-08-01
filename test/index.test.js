@@ -233,8 +233,8 @@ describe('circular', function() {
   });
 });
 
-describe('partial expand', function() {
-  it('partial expand', function() {
+describe('partial wrapping', function() {
+  it('partial wrapping', function() {
     const arr1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     const arr2 = [arr1, arr1, [arr1, arr1]]
     // Wrapping at col 80 should mean that instances of arr1 fit onto a line,

@@ -43,7 +43,7 @@ Outputs:
 ## Options
 
   - `wrapWidth` (default: `120`) - how far a line will go before it wraps. A value of `0` means it will wrap as soon as possible on each line.
-  - `indentSize` (default: `2`) - amount to indent each level
+  - `indentIncrement` (default: `2`) - amount to indent each level
   - `baseIndent` (default: `0`) - Amount to indent the root level, except the first line which must be indented
     externally if the need requires
 

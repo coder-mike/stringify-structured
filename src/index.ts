@@ -3,7 +3,7 @@ export interface StringifyOpts {
   wrapWidth?: number;
 
   /** Amount to indent each level */
-  indentSize?: number | string;
+  indentIncrement?: number | string;
 
   /** Amount to indent the root level, except the first line which must be
    * indented externally if the need requires */
@@ -30,21 +30,12 @@ export interface Stringifiable {
    * "measure" pass which calculates how much space the result will take up, and
    * the second pass renders the measured result to a string.
    */
-  [stringifySymbol](params: MeasureParams): MeasureResult;
+  [stringifySymbol](params: RenderParams): RenderResult;
 
   toString(opts?: StringifyOpts): string;
 }
 
-export interface MeasureParams {
-  /**
-   * The text column at which the value will be rendered, if the parent chooses
-   * to render the value inline. The caller can always change its mind and
-   * render the value at an earlier column (by starting this value on its own
-   * line), but not a later column, so `startCol` can be used to trigger
-   * wrapping behavior of the measured value.
-   */
-  startCol: number;
-
+export interface RenderParams {
   /**
    * The column at which the user has requested to wrap the output
    */
@@ -53,44 +44,33 @@ export interface MeasureParams {
   /**
    * Function to call to get a stringifier for a nested value
    */
-  measure: (value: any, measureParams: MeasureParams) => MeasureResult;
+  render: (value: any, measureParams: RenderParams) => RenderResult;
+
+  /** The indentation to put after any inserted line breaks (but generally not
+   * at the start of the string) */
+  indent: string;
+
+  /** The amount to add to the indent to created nested indents. */
+  indentIncrement: string;
 }
 
-export interface MeasureResult {
-  /**
-   * If the content could be rendered as a single line, this is how long the
-   * line would be (if `isMultiline` is true then this field is meaningless).
-   */
-  singleLineLength?: number;
-
+export interface RenderResult {
   /**
    * Must be true if `render` will return a string with multiple lines.
    */
   isMultiline: boolean;
 
-  /**
-   * Render the value into a string.
-   *
-   * If `isMultiline` is false, the result of this function must not contain
-   * line breaks.
-   *
-   * @param indent The indentation to put after any inserted line breaks (but
-   * generally not at the start of the string)
-   *
-   * @param indentIncrement The amount to add to the indent to created nested
-   * indents.
-   */
-  render(indent: string, indentIncrement: string): string
+  content: string
 }
 
-export function stringify(value: any, opts?: StringifyOpts) {
+export function stringify(value: any, opts?: StringifyOpts): string {
   const wrapWidth = opts?.wrapWidth ?? 120;
 
-  const indentSize = typeof opts?.indentSize === 'string'
-    ? opts?.indentSize
-    : spaceWithLength(opts?.indentSize ?? 2);
+  const indentIncrement = typeof opts?.indentIncrement === 'string'
+    ? opts?.indentIncrement
+    : spaceWithLength(opts?.indentIncrement ?? 2);
 
-  const baseIndent = typeof opts?.baseIndent === 'string'
+  const indent = typeof opts?.baseIndent === 'string'
     ? opts?.baseIndent
     : spaceWithLength(opts?.baseIndent ?? 0);
 
@@ -99,18 +79,14 @@ export function stringify(value: any, opts?: StringifyOpts) {
   // For detecting circular references
   const alreadyVisited = new Set<any>();
 
-  const startCol = 0;
+  const rendered = render(value, { render, wrapWidth, indent, indentIncrement });
 
-  const measured = measure(value, { startCol, measure, wrapWidth });
-  const rendered = measured.render(baseIndent, indentSize);
+  return rendered.content;
 
-  return rendered;
-
-  function measure(value: any, measureParams: MeasureParams): MeasureResult {
+  function render(value: any, measureParams: RenderParams): RenderResult {
     if (isObject(value)) {
       if (alreadyVisited.has(value)) {
-        const s = '<circular>';
-        return { isMultiline: false, singleLineLength: s.length, render: () => s };
+        return text`<circular>`[stringifySymbol](measureParams);
       }
       try {
         alreadyVisited.add(value);
@@ -180,33 +156,32 @@ export function stringifyStringLiteral(s: string): string {
 export function text(strings: TemplateStringsArray, ...interpolations: any[]): Stringifiable {
   const result: Stringifiable = {
     toString: opts => stringify(result, opts),
-    [stringifySymbol]({ startCol, wrapWidth }) {
+    [stringifySymbol]({ wrapWidth, indent }): RenderResult {
       const text = interpolate(strings, ...interpolations.map(x => '' + x));
       const lines = text.split(/\r?\n/g);
+
       if (lines.length === 1) {
         return {
           isMultiline: false,
-          singleLineLength: text.length,
-          render: () => text
+          content: text,
         }
       } else {
+        // This logic attempts to re-indent the text if there are multiple
+        // lines. It does so by detecting the smallest indent across all
+        // non-blank lines and then replacing that with the new indent. It
+        // tries to preserve nested indentation in the text itself.
+        const [firstLine, ...restLines] = lines;
+        const indentOfLine = (line: string) => (line.match(/^ */) as any)[0].length;
+        const nonBlankLines = restLines.filter(l => !(/^\s*$/g).test(l));
+        const minIndentSize = Math.min.apply(Math, nonBlankLines.map(indentOfLine));
+        const minIndent = ' '.repeat(isFinite(minIndentSize) ? minIndentSize : 0);
+        const matchIndent = new RegExp('^' + minIndent, 'gm');
+        // By convention in this library, any newline/indentation on the
+        // first line of an element is handled by the parent, not the child
+        const reIndentedLines = [firstLine, ...restLines.map(l => l.replace(matchIndent, indent))];
         return {
           isMultiline: true,
-          render(indent) {
-            // This logic attempts to re-indent the text if there are multiple
-            // lines. It does so by detecting the smallest indent across all
-            // non-blank lines and then replacing that with the new indent. It
-            // tries to preserve nested indentation in the text itself.
-            const [firstLine, ...restLines] = lines;
-            const indentOfLine = (line: string) => (line.match(/^ */) as any)[0].length;
-            const nonBlankLines = restLines.filter(l => !(/^\s*$/g).test(l));
-            const minIndent = ' '.repeat(Math.min.apply(Math, nonBlankLines.map(indentOfLine)));
-            const matchIndent = new RegExp('^' + minIndent, 'gm');
-            // By convention in this library, any newline/indentation on the
-            // first line of an element is handled by the parent, not the child
-            const reIndentedLines = [firstLine, ...restLines.map(l => l.replace(matchIndent, indent))];
-            return reIndentedLines.join('\n');
-          }
+          content: reIndentedLines.join('\n'),
         }
       }
     }
@@ -215,61 +190,62 @@ export function text(strings: TemplateStringsArray, ...interpolations: any[]): S
   return result;
 }
 
+function sum(ns: number[]) {
+  return ns.reduce((a, n) => a + n, 0);
+}
+
+
 export function block(strings: TemplateStringsArray, ...interpolations: any[]): Stringifiable {
+  if (strings.length !== interpolations.length + 1) {
+    throw new Error('Expected a tagged template to be invoked with exactly one more string than interpolation')
+  }
   const result: Stringifiable = {
     toString: opts => stringify(result, opts),
-    [stringifySymbol]({ startCol, wrapWidth, measure }) {
-      const measuredInterpolations: MeasureResult[] = [];
-      if (strings.length !== interpolations.length + 1) {
-        throw new Error('Expected a tagged template to be invoked with exactly one more string than interpolation')
-      }
-      let col = startCol + strings[0].length;
-      for (let i = 0; i < interpolations.length; i++) {
-        const string = strings[i + 1];
-        const interpolation = interpolations[i];
-        const interpolationMeasurement = measure(interpolation, { startCol: col, wrapWidth, measure });
-        col += interpolationMeasurement.singleLineLength + string.length;
-        measuredInterpolations.push(interpolationMeasurement);
-      }
-      const singleLineLength = col - startCol;
+    [stringifySymbol]({ wrapWidth, render, indent, indentIncrement }): RenderResult {
+      const childIndent = indent + indentIncrement;
+
+      const renderedInterpolations = interpolations.map(x => render(x, {
+        indentIncrement, render, wrapWidth,
+        indent: childIndent
+      }));
+
+      const singleLineLength = sum(strings.map(s => s.length)) + sum(renderedInterpolations.map(s => s.content.length));
 
       const isMultiline =
-        measuredInterpolations.some(x => x.isMultiline) ||
-        (startCol + singleLineLength > wrapWidth) ||
+        renderedInterpolations.some(x => x.isMultiline) ||
+        (indent.length + singleLineLength > wrapWidth) ||
         strings.some(s => s.includes('\n'));
+
+
+      let content: string;
+      if (isMultiline) {
+        content = interpolate(
+          strings.map((s, i) => {
+            // When we're breaking the content onto multiple lines,
+            // whitespace at the start or end of each line is considered to be superfluous.
+            s = s.trim();
+            // The opening string does not have any indentation or a
+            // preceding line break
+            if (i === 0) return s;
+            // For convenience, blank lines are omitted, since
+            // ``block`(${a} ${b})` `` probably doesn't intend there to be
+            // a blank line between `a` and `b`
+            if (s === '') return s;
+            // Otherwise, each string is on a fresh line, indented by the
+            // indent amount (not the child indent amount)
+            return `\n${indent}${s}`;
+          }),
+          // Each child also occurs on its own line, but indented by the
+          // child indent amount
+          ...renderedInterpolations.map(x => `\n${childIndent}${x.content.trim()}`)
+        );
+      } else {
+        content = interpolate(strings, ...renderedInterpolations.map(x => x.content));
+      }
 
       return {
         isMultiline,
-        singleLineLength,
-        render(indent, indentIncrement) {
-          const childIndent = indent + indentIncrement;
-          const renderedInterpolations = measuredInterpolations.map(x =>
-            x.render(childIndent, indentIncrement)
-          );
-          if (isMultiline) {
-            return interpolate(
-              strings.map((s, i) => {
-                // When we're breaking the content onto multiple lines,
-                // whitespace at the start or end of each line is considered to be superfluous.
-                s = s.trim();
-                // The opening string does not have any indentation or a
-                // preceding line break
-                if (i === 0) return s;
-                // For convenience, blank lines are omitted, since
-                // ``block`(${a} ${b})` `` probably doesn't intend there to be
-                // a blank line between `a` and `b`
-                if (s === '') return s;
-                // Otherwise, each string is on a fresh line, indented by the
-                // indent amount (not the child indent amount)
-                return `\n${indent}${s}`;
-              }),
-              // Each child also occurs on its own line, but indented by the
-              // child indent amount
-              ...renderedInterpolations.map(x => `\n${childIndent}${x.trim()}`));
-          } else {
-            return interpolate(strings, ...renderedInterpolations);
-          }
-        }
+        content,
       }
     }
   };
@@ -278,36 +254,32 @@ export function block(strings: TemplateStringsArray, ...interpolations: any[]): 
 }
 
 export function inline(strings: TemplateStringsArray, ...interpolations: any[]): Stringifiable {
+  if (strings.length !== interpolations.length + 1) {
+    throw new Error('Expected a tagged template to be invoked with exactly one more string than interpolation')
+  }
   const result: Stringifiable = {
     toString: opts => stringify(result, opts),
-    [stringifySymbol]({ startCol, wrapWidth, measure }) {
-      const measuredInterpolations: MeasureResult[] = [];
-      if (strings.length !== interpolations.length + 1) {
-        throw new Error('Expected a tagged template to be invoked with exactly one more string than interpolation')
-      }
-      let col = startCol + strings[0].length;
-      for (let i = 0; i < interpolations.length; i++) {
-        const string = strings[i + 1];
-        const interpolation = interpolations[i];
-        const interpolationMeasurement = measure(interpolation, { startCol: col, wrapWidth, measure });
-        col += interpolationMeasurement.singleLineLength + string.length;
-        measuredInterpolations.push(interpolationMeasurement);
-      }
-      const singleLineLength = col - startCol;
+    [stringifySymbol](params): RenderResult {
+      const { wrapWidth, render, indent, indentIncrement } = params;
+
+      const renderedInterpolations = interpolations.map(x => render(x, params));
+
+      const singleLineLength =
+        sum(strings.map(s => s.length)) +
+        sum(renderedInterpolations.map(s => s.content.length));
 
       const isMultiline =
-        measuredInterpolations.some(x => x.isMultiline) ||
-        (startCol + singleLineLength > wrapWidth) ||
+        renderedInterpolations.some(x => x.isMultiline) ||
+        (indent.length + singleLineLength > wrapWidth) ||
         strings.some(s => s.includes('\n'));
+
+      // `inline` adds no line break points of its own, so the multi-line
+      // and single-line are the same
+      const content = interpolate(strings, ...renderedInterpolations.map(x => x.content));
 
       return {
         isMultiline,
-        singleLineLength,
-        render(indent, indentIncrement) {
-          // `inline` adds no line break points of its own, so the multi-line
-          // and single-line are the same
-          return interpolate(strings, ...measuredInterpolations.map(x => x.render(indent, indentIncrement)));
-        }
+        content
       }
     }
   };
@@ -318,37 +290,32 @@ export function inline(strings: TemplateStringsArray, ...interpolations: any[]):
 export function list(joiner: string, items: Iterable<any>): Stringifiable {
   const result: Stringifiable = {
     toString: opts => stringify(result, opts),
-    [stringifySymbol]({ startCol, wrapWidth, measure }) {
-      const measured: MeasureResult[] = [];
-      let col = startCol;
-      let i = 0;
-      for (const item of items) {
-        if (i !== 0) col += joiner.length;
-        const measuredItem = measure(item, { startCol: col, wrapWidth, measure });
-        measured.push(measuredItem);
-        col += measuredItem.singleLineLength;
-        i++;
-      }
+    [stringifySymbol](params): RenderResult {
+      const { wrapWidth, render, indent } = params;
 
-      const singleLineLength = col - startCol;
+      const renderedItems = [...items].map(x => render(x, params));
+
+      const singleLineLength =
+        sum(renderedItems.map(x => x.content.length)) +
+        joiner.length * Math.max(renderedItems.length - 1, 0);
 
       const isMultiline =
-        measured.some(x => x.isMultiline) ||
-        (startCol + singleLineLength > wrapWidth) ||
+      renderedItems.some(x => x.isMultiline) ||
+        (indent.length + singleLineLength > wrapWidth) ||
         joiner.includes('\n');
+
+      let content: string;
+      if (isMultiline) {
+        content = renderedItems
+          .map(x => x.content)
+          .join(`${joiner.trimEnd()}\n${indent}`)
+      } else {
+        content = renderedItems.map(x => x.content).join(joiner)
+      }
 
       return {
         isMultiline,
-        singleLineLength,
-        render(indent, indentIncrement) {
-          if (isMultiline) {
-            return measured
-              .map(x => x.render(indent, indentIncrement))
-              .join(`${joiner.trimEnd()}\n${indent}`)
-          } else {
-            return measured.map(x => x.render(indent, indentIncrement)).join(joiner)
-          }
-        }
+        content
       }
     }
   };
