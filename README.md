@@ -1,6 +1,6 @@
 # stringify-structured
 
-A customizable stringification algorithm for tree-structured data (e.g. object graphs) for diagnostic purposes.
+A customizable stringification algorithm for POD data for diagnostic purposes.
 
   - Similar in spirit to `JSON.stringify` but has out-of-the-box support for:
     - Maps
