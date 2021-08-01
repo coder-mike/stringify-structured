@@ -288,7 +288,14 @@ export function inline(strings: TemplateStringsArray, ...interpolations: any[]):
   return result;
 }
 
-export function list(joiner: string, items: Iterable<any>, opts?: { sort?: boolean }): Stringifiable {
+export function list(
+  joiner: string,
+  items: Iterable<any>,
+  opts?: {
+    sort?: boolean,
+    multiLineJoiner?: string,
+  }
+): Stringifiable {
   const result: Stringifiable = {
     toString: opts => stringify(result, opts),
     [stringifySymbol](params): RenderResult {
@@ -310,9 +317,10 @@ export function list(joiner: string, items: Iterable<any>, opts?: { sort?: boole
 
       let content: string;
       if (isMultiline) {
+        const actualJoiner = opts?.multiLineJoiner ?? joiner.trim();
         content = renderedItems
           .map(x => x.content)
-          .join(`${joiner.trimEnd()}\n${indent}`)
+          .join(`${actualJoiner}\n${indent}`)
       } else {
         content = renderedItems.map(x => x.content).join(joiner)
       }

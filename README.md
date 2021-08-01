@@ -150,7 +150,63 @@ stringify(
 
 `list` introduces implicit line-wrap points after each item (after the joiner).
 
+### List option: `sort`
+
 Using the list with `{ sort: true }` options will cause the list to be sorted lexicographically in the output, which is a simple way to produce deterministic/stable output when the list items do not have an inherent order (e.g. a list of items in a `Set`).
+
+```js
+stringify(list(', ', ['3rd', '2nd', '1st']), { sort: true });
+```
+
+```
+'1st', '2nd', '3rd'
+```
+
+### List option: `multiLineJoiner`
+
+Using the list with `{ multiLineJoiner: 'x' }` options will use a different joiner string when the list is split across multiple lines.
+
+```js
+stringify(
+  list(', ', [42, 43, 44], { multiLineJoiner: '' }),
+  { wrapWidth: 0 }
+);
+```
+
+```
+42
+43
+44
+```
+
+```js
+stringify(
+  list(', ', [42, 43, 44], { multiLineJoiner: '' }),
+  { wrapWidth: Infinity }
+);
+```
+
+```
+42, 43, 44
+```
+
+Unlike the normal joiner, the multi-line joiner won't be trimmed, so it facilitates the description of having additional line spacing between items:
+
+```js
+stringify(
+  list(', ', [42, 43, 44], { multiLineJoiner: '\n' }),
+  { wrapWidth: 0 }
+);
+```
+
+```
+42
+
+43
+
+44
+```
+
 
 ## Inline
 

@@ -149,6 +149,31 @@ describe('list', function () {
 
       Paragraph`);
   });
+
+  it('sort', function() {
+    const list1 = list(', ', ['3rd', '2nd', '1st'], { sort: true });
+    assert.strictEqual(stringifyIndented(list1),
+      `'1st',
+      '2nd',
+      '3rd'`);
+  });
+
+  it('multiLineJoiner', function() {
+    const list1 = list(', ', [42, 43, 44], { multiLineJoiner: '' });
+    const list2 = list(', ', [42, 43, 44], { multiLineJoiner: '\n' });
+    assert.strictEqual(stringifyIndented(list1),
+      `42
+      43
+      44`);
+    assert.strictEqual(stringify(list1),
+      `42, 43, 44`);
+    assert.strictEqual(stringifyIndented(list2),
+      `42
+
+      43
+
+      44`);
+  });
 })
 
 describe('inline', function() {
