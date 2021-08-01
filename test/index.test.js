@@ -41,6 +41,14 @@ describe('primitives', function () {
     assert.strictEqual(stringify(true), 'true');
     assert.strictEqual(stringify(false), 'false');
   });
+
+  it('undefined', function() {
+    assert.strictEqual(stringify(undefined), 'undefined');
+  });
+
+  it('null', function() {
+    assert.strictEqual(stringify(null), 'null');
+  });
 });
 
 describe('text', function () {
