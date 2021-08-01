@@ -296,3 +296,12 @@ describe('stable ordering', function() {
     assert.strictEqual(stringify(map1), stringify(map2));
   })
 })
+
+describe('replacer', function() {
+  it('replacer', function() {
+    const value = [[new Date('2021-08-01T05:21:18.394Z')]]
+    const replacer = o => o instanceof Date ? inline`date ${o.toISOString()}` : o;
+    assert.strictEqual(stringify(value, { replacer }),
+      `[[date '2021-08-01T05:21:18.394Z']]`);
+  })
+})

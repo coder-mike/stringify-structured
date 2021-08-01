@@ -8,11 +8,11 @@ A customizable stringification algorithm for POD data.
     - `undefined`
   - Automatically detects circular references
   - Produces stable ordering for maps, sets, and objects
-  - Lighter-weight output than JSON (less syntactic noise by default).
+  - Visually lighter-weight output than JSON (less syntactic noise by default).
     - Tries not to quote keys in objects. I.e. `{ a: 1 }` instead of `{ "a": 1 }`
     - Uses single quotes instead of double quotes for strings
     - Avoids needless line breaks. Small substructures like `[1, 2, 3]` will be put on a single line by default.
-  - **Easy to customize** the output syntax of individual values in the tree in-place (without needing a "replacer function")
+  - **Easy to customize** the output syntax of individual values in the tree in-place (without needing a "replacer function" although this is also supported)
   - Opinionated wrapping and indentation rules (tries to fill up a given output width instead of putting everything on a new line)
 
 The customizability is a key reason why I created this library. You have a lot of control over the output syntax (allowing for readable output syntax for custom types and substructures), but the sensible defaults mean that getting started with the library is as simple as calling `stringify` directly on a POD value and then syntax customization can be done incrementally.
@@ -51,216 +51,258 @@ Outputs:
   - `indentIncrement` (default: `2`) - amount to indent each level
   - `baseIndent` (default: `0`) - Amount to indent the root level, except the first line which must be indented
     externally if the need requires
+  - `replacer` - similar to the replacer for `JSON.stringify`, this is executed on every element, allowing it to customize it's own output
 
-## Customization: `block`
+# Customize output syntax
+
+A major point of this library is the ability to customize the output syntax incrementally to make it more readable in the context of knowledge about specific types in the data structure. The output can be described using the following structural primitives:
+
+  - `text` - puts custom text into the output verbatim
+  - `block` - for a parent-child relationship in the data
+  - `list` - for a sibling relationship in the data
+  - `inline` - for joining custom prefixes and suffixes on other structures
+
+To give an idea of the power of these structural primitives, note that the default JSON-like syntax is implemented in terms of these as well. See [here](https://github.com/coder-mike/stringify-structured/blob/1ea390f68598f599cbf26ee96764d4aa766c5ebf/src/index.ts#L355). For example, the syntax of an array is defined as a `[]` `block` containing a comma-separated `list` of children.
+
+The following examples assume that all of these primitives have been imported at the top level. The examples use `wrapWidth: 0` to help illustrate the output when line breaks and indentation are used at every possible point.
 
 ```js
-import { stringify, block } from 'stringify-structured';
-
-stringify(block`value ${42}`); // "value 42"
+import { stringify, block, text, inline, list } from 'stringify-structured';
 ```
 
-The above example is different to just using normal string interpolation because the wrapping and indentation algorithm is aware that `42` is a child of the formatted value, and so will indent it if there is an overflow.
+## Block
 
-Uses of `block` can be nested to create hierarchical structures:
+`block` is a [tagged template](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals#tagged_templates). The interpolations are treated as children of the block
 
 ```js
-const value = block`parent(${
-  block`child(${
-    42
-  })`
-})`
-stringify(value); // parent(child(42))
+stringify(block`[${42}]`, { wrapWidth: 0 })
+```
 
-stringify(value, { wrapWidth: 0 }); /* Outputs:
-parent(
-  child(
-    42
-  )
+```
+[
+  42
+]
+```
+
+```js
+stringify(block`<a>${42}</a>`, { wrapWidth: 0 })
+```
+
+```
+<a>
+  42
+</a>
+```
+
+```js
+stringify(block`A: ${42} B: ${43} C: ${44}`, { wrapWidth: 0 })
+```
+
+```
+A:
+  42
+B:
+  43
+C:
+  44
+```
+
+A `block` introduces implicit line-wrap points between each item which will turn into line breaks if the block exceeds the defined `wrapWidth`.
+
+## List
+
+`list(joiner, [items], options?)`
+
+A `list` describes a set of sibling values
+
+```js
+stringify(list(', ', [42, 43, 44]), { wrapWidth: 0 });
+```
+
+```
+42,
+43,
+44
+```
+
+A list is useful inside a block to have multiple children of the block:
+
+```js
+stringify(
+  block`[${
+    list(', ', [
+      42,
+      43,
+      44
+    ])
+  }]`,
+  { wrapWidth: 0 }
 )
-*/
 ```
 
-`block` introduces implicit wrap points after each literal string and each interpolated value. (See section on wrapping rules later in this doc).
+```
+[
+  42,
+  43,
+  44
+]
+```
 
-## Customization: `list(joiner, [items], { sort?: boolean }?)`
+`list` introduces implicit line-wrap points after each item (after the joiner).
 
-A `list` allows you to define multiple children for a block.
+Using the list with `{ sort: true }` options will cause the list to be sorted lexicographically in the output, which is a simple way to produce deterministic/stable output when the list items do not have an inherent order (e.g. a list of items in a `Set`).
+
+## Inline
+
+The `inline` tagged template is similar to `block` except that the values inside it are not treated as children and no line-wrap points are introduced.
 
 ```js
-const value = block`parent(${
-  list(', ', [
-    block`childA(${
+stringify(inline`a ${42} b ${43} c`, { wrapWidth: 0 })
+```
+
+```
+a 42 b 43 c
+```
+
+```js
+stringify(
+  inline`try ${
+    block`{ ${
       42
-    })`,
-    block`childB(${
-      list(', ',
-        43,
-        44,
-      )
-    })`
-  ])
-})`
+    } }`
+  } catch ${
+    block`{ ${
+      43
+    } }`
+  }`,
+  { wrapWidth: 0 }
+);
 ```
 
-We can `stringify` this with different `wrapWidth`s to see how this `value` is structure-aware:
-
-```js
-stringify(value) /* Output:
-parent(childA(42), childB(43, 44))
-*/
 ```
-
-```js
-stringify(value, { wrapWidth: 20 }) /* Output:
-parent(
-  childA(42),
-  childB(43, 44)
-)
-*/
-```
-
-```js
-stringify(value, { wrapWidth: 0 }) /* Output:
-parent(
-  childA(
-    42
-  ),
-  childB(
-    43,
-    44
-  )
-)
-*/
-```
-
-`list` introduces implicit wrap points after each item (after the joiner).
-
-Using the list with the `sort: true` option will cause the list to be sorted lexicographically in the output, which is a simple way to produce deterministic/stable output when the list items do not have an inherent order (e.g. a list of items in a `Set`).
-
-## Customization: `inline`
-
-The `inline` tagged template is similar to `block` except that its interpolations aren't treated as children and it does not introduce any implicit wrap points.
-
-As a general rule of when to use `inline` vs `block`: use `block` to represent something that has an open and close parenthesis (or equivalent) and so would need the insides to be indented. Use `inline` everywhere else.
-
-```js
-const value = inline`try ${
-  block`{ ${
-    'foo'
-  } }`
-} catch ${
-  block`{ ${
-    'bar'
-  } }`
-}`;
-
-stringify(value); // "try { 'foo' } catch { 'bar' }"
-stringify(value, { wrapWidth: 0 }) /* Output:
 try {
-  'foo'
+  42
 } catch {
-  'bar'
+  43
 }
-*/
 ```
 
 ## Customization: `text`
 
-The `text` tagged template is similar to `inline` except that its interpolations are treated as pre-formatted output text.
+The `text` tagged template is similar to `inline` except that its interpolations are treated as pre-formatted output text (verbatim except for the re-indentation shown below).
 
 If the text has multiple lines, the lines will be re-indented inside the parent hierarchy.
 
 ```js
-stringify(text`foo`); // foo
+stringify(text`foo`);
+```
 
+```
+foo
+```
+
+```js
+stringify(text`First line\nSecond line\nThird line`);
+```
+
+```
+First line
+Second line
+Third line
+```
+
+```js
 stringify(
-  block`(${
-    text`foo\nbar`
-  })`);
-/*
-(
-  foo
-  bar
-)
-*/
+  block`<p>${
+    text`First line\nSecond line\nThird line`
+  }</p>`,
+  { wrapWidth: 0 }
+);
 ```
 
-## Cookbook: Multiple root-level nodes
-
-```js
-const value = list('\n', ['a', 'b', 'c']);
-stringify(value); /* Output:
-'a'
-'b'
-'c'
-*/
+```
+<p>
+  First line
+  Second line
+  Third line
+</p>
 ```
 
-## Cookbook: Custom array-like type
+## Mixing custom syntax and default syntax
+
+Custom syntax can be mixed in with default formatting.
 
 ```js
-import { stringify, block, list } from 'stringify-structured';
-
-const stringifyMyArr = arr => block`my array [${list(', ', arr)}]`;
-stringify(stringifyMyArr(1, 2, 3), { wrapWidth: 0 } );
-/*
-my array [
-  1,
-  2,
-  3
-],
-*/
+stringify({
+  a: 'Normal string',
+  b: text`--Custom syntax--`,
+}, { wrapWidth: 0 });
 ```
 
-## Cookbook: Custom object-like type
-
-```js
-const myObjType = obj => block`myObj { ${
-  list(', ', Object.entries(obj).map(([key, value]) =>
-    inline`${key}:${value}`)
-  )
-} }`
-const customObject = myObjType({ a: 1, b: 2, c: 3 });
-const normalObject = { x: 1, y: customObject, z: 5 };
-stringify(normalObject, { wrapWidth: 30 });
-/*
+```
 {
-  x: 1,
-  y: myObj { a: 1, b: 2, c: 3 },
-  z: 5
+  a: 'Normal string',
+  b: --Custom syntax--
 }
-*/
 ```
 
-## Cookbook: A try-catch-like output
+The recommended pattern for stringifying some values with custom syntax is to have a first pass that produces a new data structure with syntax awareness, as in the following example where a lat/long value embedded in a `person` has custom formatting while the `person` just defaults to the normal object formatting:
 
 ```js
-const tryCatch = (tryBody, catchBody) => inline`try ${
-  block`{ ${
-    tryBody
-  } }`
-} catch ${
-  block`{ ${
-    catchBody
-  } }`
-}`;
+const person = {
+  name: 'Michael Hunter',
+  location: { lat: 24, long: 42 }
+};
 
-const myTryCatch = tryCatch('foo', 'bar');
+const renderPerson = person => ({
+  ...person,
+  // Override the rendering for just the location, while leaving the other fields to be default-formatted
+  location: renderLocation(person.location)
+})
 
-stringify(myTryCatch); // try { 'foo' } catch { 'bar' }
+const renderLocation = ({ lat, long }) =>
+  text`${Math.abs(lat)}°${lat < 0 ? 'S' : 'N'} ${Math.abs(long)}°${long < 0 ? 'W' : 'E'}`
 
-stringify(myTryCatch, { structure: 0 });
-/*
-try {
-  'foo'
-} catch {
-  'bar'
-}
-*/
+stringify(renderPerson(person));
 ```
 
-## Layout rules
+```
+{ name: 'Michael Hunter', location: 24°N 42°E }
+```
+
+We can then incrementally improve the syntax, for example by providing custom syntax for the person:
+
+```js
+const renderPerson = person =>
+  inline`Person ${person.name} @ ${renderLocation(person.location)}`
+
+stringify(renderPerson(person));
+```
+
+```
+Person 'Michael Hunter' @ 24°N 42°E
+```
+
+## Replacer
+
+Another way of providing custom rendering behavior is using a replacer function.
+
+```js
+function replacer(value) {
+  if (value instanceof Date) {
+    return inline`date ${value.toISOString()}`
+  }
+  return value;
+}
+
+stringify([42, 43, new Date()], { replacer })
+```
+
+```
+[42, 43, date '2021-08-01T05:21:18.394Z']
+```
+
+# Layout rules
 
 The algorithm uses opinionated wrapping and layout behavior.
 

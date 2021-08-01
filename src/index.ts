@@ -9,10 +9,8 @@ export interface StringifyOpts {
    * indented externally if the need requires */
   baseIndent?: number | string;
 
-  /** A function that describes how to stringify a value that doesn't already
-   * implement the Stringifiable protocol. The default value is to use
-   * `defaultFormatter`. */
-  formatter?: (value: any) => Stringifiable;
+  /** A function that describes how to represent a particular value */
+  replacer?: (value: any) => any;
 }
 
 export interface RenderParameters {
@@ -74,7 +72,7 @@ export function stringify(value: any, opts?: StringifyOpts): string {
     ? opts?.baseIndent
     : spaceWithLength(opts?.baseIndent ?? 0);
 
-  const formatter = opts?.formatter ?? defaultFormatter;
+  const replacer = opts?.replacer;
 
   // For detecting circular references
   const alreadyVisited = new Set<any>();
@@ -91,18 +89,20 @@ export function stringify(value: any, opts?: StringifyOpts): string {
       try {
         alreadyVisited.add(value);
 
+        value = replacer ? replacer(value) : value;
         const stringifiable = isStringifiable(value)
           ? value
-          : formatter(value)
+          : defaultFormatter(value)
 
         return stringifiable[stringifySymbol](measureParams);
       } finally {
         alreadyVisited.delete(value);
       }
     } else {
+      value = replacer ? replacer(value) : value;
       const stringifiable = isStringifiable(value)
         ? value
-        : formatter(value)
+        : defaultFormatter(value)
 
       return stringifiable[stringifySymbol](measureParams);
     }
