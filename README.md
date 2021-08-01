@@ -108,6 +108,7 @@ We can `stringify` this with different `wrapWidth`s to see how this `value` is s
 ```js
 stringify(value) /* Output:
 parent(childA(42), childB(43, 44))
+*/
 ```
 
 ```js
@@ -116,6 +117,7 @@ parent(
   childA(42),
   childB(43, 44)
 )
+*/
 ```
 
 ```js
@@ -129,6 +131,7 @@ parent(
     44
   )
 )
+*/
 ```
 
 `list` introduces implicit wrap points after each item (after the joiner).
@@ -159,6 +162,7 @@ try {
 } catch {
   'bar'
 }
+*/
 ```
 
 ## Customization: `text`
@@ -190,6 +194,7 @@ stringify(value); /* Output:
 'a'
 'b'
 'c'
+*/
 ```
 
 ## Cookbook: Custom array-like type
