@@ -5,8 +5,14 @@ export interface StringifyOpts {
   /** Amount to indent each level */
   indentSize?: number | string;
 
-  /** Amount to indent the root level */
+  /** Amount to indent the root level, except the first line which must be
+   * indented externally if the need requires */
   baseIndent?: number | string;
+
+  /** A function that describes how to stringify a value that doesn't already
+   * implement the Stringifiable protocol. The default value is to use
+   * `defaultFormatter`. */
+  formatter?: (value: any) => Stringifiable;
 }
 
 export interface RenderParameters {
@@ -55,7 +61,7 @@ export interface MeasureResult {
    * If the content could be rendered as a single line, this is how long the
    * line would be (if `isMultiline` is true then this field is meaningless).
    */
-  singleLineLength: number;
+  singleLineLength?: number;
 
   /**
    * Must be true if `render` will return a string with multiple lines.
@@ -79,12 +85,16 @@ export interface MeasureResult {
 
 export function stringify(value: any, opts?: StringifyOpts) {
   const wrapWidth = opts?.wrapWidth ?? 120;
+
   const indentSize = typeof opts?.indentSize === 'string'
     ? opts?.indentSize
     : spaceWithLength(opts?.indentSize ?? 2);
+
   const baseIndent = typeof opts?.baseIndent === 'string'
     ? opts?.baseIndent
     : spaceWithLength(opts?.baseIndent ?? 0);
+
+  const formatter = opts?.formatter ?? defaultFormatter;
 
   // For detecting circular references
   const alreadyVisited = new Set<any>();
@@ -93,22 +103,33 @@ export function stringify(value: any, opts?: StringifyOpts) {
 
   const measured = measure(value, { startCol, measure, wrapWidth });
   const rendered = measured.render(baseIndent, indentSize);
+
   return rendered;
 
   function measure(value: any, measureParams: MeasureParams): MeasureResult {
-    const stringifiable = getStringifiable(value);
-    const measured = stringifiable[stringifySymbol](measureParams);
-    return measured;
-  }
-
-  function getStringifiable(value: any): Stringifiable {
     if (isObject(value)) {
-      if (alreadyVisited.has(value)) return text`<circular>`;
-      alreadyVisited.add(value);
+      if (alreadyVisited.has(value)) {
+        const s = '<circular>';
+        return { isMultiline: false, singleLineLength: s.length, render: () => s };
+      }
+      try {
+        alreadyVisited.add(value);
+
+        const stringifiable = isStringifiable(value)
+          ? value
+          : formatter(value)
+
+        return stringifiable[stringifySymbol](measureParams);
+      } finally {
+        alreadyVisited.delete(value);
+      }
+    } else {
+      const stringifiable = isStringifiable(value)
+        ? value
+        : formatter(value)
+
+      return stringifiable[stringifySymbol](measureParams);
     }
-    return isStringifiable(value)
-      ? value
-      : getDefaultStringifiable(value)
   }
 }
 
@@ -119,7 +140,7 @@ function isObject(value: any): boolean {
 /**
  * Renders a list of key-value pairs to the form "{ a: b, c: d, ... }"
  */
-export function objectLike(keyValuePairs: Iterable<any[]>): Stringifiable {
+function objectLike(keyValuePairs: Iterable<any[]>): Stringifiable {
   return block`{ ${
     list(', ', [...keyValuePairs].map(([k, v]) =>
       inline`${
@@ -131,13 +152,11 @@ export function objectLike(keyValuePairs: Iterable<any[]>): Stringifiable {
   } }`;
 }
 
-export function isStringifiable(value: any): value is Stringifiable {
-  return (typeof value === 'object' || typeof value === 'function')
-    && value !== null
-    && typeof value[stringifySymbol] === 'function';
+function isStringifiable(value: any): value is Stringifiable {
+  return isObject(value) && typeof value[stringifySymbol] === 'function';
 }
 
-export function spaceWithLength(n: number): string {
+function spaceWithLength(n: number): string {
   return new Array(n + 1).join(' ');
 }
 
@@ -159,7 +178,41 @@ export function stringifyStringLiteral(s: string): string {
 }
 
 export function text(strings: TemplateStringsArray, ...interpolations: any[]): Stringifiable {
+  const result: Stringifiable = {
+    toString: opts => stringify(result, opts),
+    [stringifySymbol]({ startCol, wrapWidth }) {
+      const text = interpolate(strings, ...interpolations.map(x => '' + x));
+      const lines = text.split(/\r?\n/g);
+      if (lines.length === 1) {
+        return {
+          isMultiline: false,
+          singleLineLength: text.length,
+          render: () => text
+        }
+      } else {
+        return {
+          isMultiline: true,
+          render(indent) {
+            // This logic attempts to re-indent the text if there are multiple
+            // lines. It does so by detecting the smallest indent across all
+            // non-blank lines and then replacing that with the new indent. It
+            // tries to preserve nested indentation in the text itself.
+            const [firstLine, ...restLines] = lines;
+            const indentOfLine = (line: string) => (line.match(/^ */) as any)[0].length;
+            const nonBlankLines = restLines.filter(l => !(/^\s*$/g).test(l));
+            const minIndent = ' '.repeat(Math.min.apply(Math, nonBlankLines.map(indentOfLine)));
+            const matchIndent = new RegExp('^' + minIndent, 'gm');
+            // By convention in this library, any newline/indentation on the
+            // first line of an element is handled by the parent, not the child
+            const reIndentedLines = [firstLine, ...restLines.map(l => l.replace(matchIndent, indent))];
+            return reIndentedLines.join('\n');
+          }
+        }
+      }
+    }
+  };
 
+  return result;
 }
 
 export function block(strings: TemplateStringsArray, ...interpolations: any[]): Stringifiable {
@@ -188,7 +241,7 @@ export function block(strings: TemplateStringsArray, ...interpolations: any[]): 
       return {
         isMultiline,
         singleLineLength,
-        render: (indent, indentIncrement) => {
+        render(indent, indentIncrement) {
           const childIndent = indent + indentIncrement;
           const renderedInterpolations = measuredInterpolations.map(x =>
             x.render(childIndent, indentIncrement)
@@ -196,12 +249,12 @@ export function block(strings: TemplateStringsArray, ...interpolations: any[]): 
           if (isMultiline) {
             return interpolate(
               strings.map((s, i) => {
-                // The opening string does not have any indentation or a
-                // preceding line break
-                if (i === 0) return s;
                 // When we're breaking the content onto multiple lines,
                 // whitespace at the start or end of each line is considered to be superfluous.
                 s = s.trim();
+                // The opening string does not have any indentation or a
+                // preceding line break
+                if (i === 0) return s;
                 // For convenience, blank lines are omitted, since
                 // ``block`(${a} ${b})` `` probably doesn't intend there to be
                 // a blank line between `a` and `b`
@@ -225,18 +278,89 @@ export function block(strings: TemplateStringsArray, ...interpolations: any[]): 
 }
 
 export function inline(strings: TemplateStringsArray, ...interpolations: any[]): Stringifiable {
+  const result: Stringifiable = {
+    toString: opts => stringify(result, opts),
+    [stringifySymbol]({ startCol, wrapWidth, measure }) {
+      const measuredInterpolations: MeasureResult[] = [];
+      if (strings.length !== interpolations.length + 1) {
+        throw new Error('Expected a tagged template to be invoked with exactly one more string than interpolation')
+      }
+      let col = startCol + strings[0].length;
+      for (let i = 0; i < interpolations.length; i++) {
+        const string = strings[i + 1];
+        const interpolation = interpolations[i];
+        const interpolationMeasurement = measure(interpolation, { startCol: col, wrapWidth, measure });
+        col += interpolationMeasurement.singleLineLength + string.length;
+        measuredInterpolations.push(interpolationMeasurement);
+      }
+      const singleLineLength = col - startCol;
 
+      const isMultiline =
+        measuredInterpolations.some(x => x.isMultiline) ||
+        (startCol + singleLineLength > wrapWidth) ||
+        strings.some(s => s.includes('\n'));
+
+      return {
+        isMultiline,
+        singleLineLength,
+        render(indent, indentIncrement) {
+          // `inline` adds no line break points of its own, so the multi-line
+          // and single-line are the same
+          return interpolate(strings, ...measuredInterpolations.map(x => x.render(indent, indentIncrement)));
+        }
+      }
+    }
+  };
+
+  return result;
 }
 
 export function list(joiner: string, items: Iterable<any>): Stringifiable {
+  const result: Stringifiable = {
+    toString: opts => stringify(result, opts),
+    [stringifySymbol]({ startCol, wrapWidth, measure }) {
+      const measured: MeasureResult[] = [];
+      let col = startCol;
+      let i = 0;
+      for (const item of items) {
+        if (i !== 0) col += joiner.length;
+        const measuredItem = measure(item, { startCol: col, wrapWidth, measure });
+        measured.push(measuredItem);
+        col += measuredItem.singleLineLength;
+        i++;
+      }
 
+      const singleLineLength = col - startCol;
+
+      const isMultiline =
+        measured.some(x => x.isMultiline) ||
+        (startCol + singleLineLength > wrapWidth) ||
+        joiner.includes('\n');
+
+      return {
+        isMultiline,
+        singleLineLength,
+        render(indent, indentIncrement) {
+          if (isMultiline) {
+            return measured
+              .map(x => x.render(indent, indentIncrement))
+              .join(`${joiner.trimEnd()}\n${indent}`)
+          } else {
+            return measured.map(x => x.render(indent, indentIncrement)).join(joiner)
+          }
+        }
+      }
+    }
+  };
+
+  return result;
 }
 
-export function isNameString(name: string): boolean {
+function isNameString(name: string): boolean {
   return /^[a-zA-Z_]+[a-zA-Z0-9_]*$/.test(name);
 }
 
-export function stringifyKey(value: any): string {
+function stringifyKey(value: any): string {
   switch (typeof value) {
     case 'undefined': return '[undefined]';
     case 'function': return '[<function>]';
@@ -257,7 +381,7 @@ export function stringifyKey(value: any): string {
   }
 }
 
-function getDefaultStringifiable(value: any): Stringifiable {
+export function defaultFormatter(value: any): Stringifiable {
   switch (typeof value) {
     case 'undefined': return text`undefined`;
     case 'boolean': return text`${value ? 'true' : 'false'}`;
@@ -287,17 +411,9 @@ function getDefaultStringifiable(value: any): Stringifiable {
   }
 }
 
-function totalLength(ss: string[]) {
-  return ss.reduce((a, s) => a + s.length, 0);
-}
-
-function sum(ns: number[]) {
-  return ns.reduce((a, n) => a + n, 0);
-}
-
 function interpolate(strings: Iterable<string>, ...interpolations: string[]): string {
   const stringIter = strings[Symbol.iterator]();
-  const interpolationIter = strings[Symbol.iterator]();
+  const interpolationIter = interpolations[Symbol.iterator]();
   let stringNext = stringIter.next();
   if (stringNext.done) {
     // Even a blank interpolation like `` has one string in it

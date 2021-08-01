@@ -7,7 +7,6 @@ A customizable stringification algorithm for tree-structured data (e.g. object g
     - Sets
     - `undefined`
   - Automatically detects circular references
-  - Deterministic/stable output in the face of key reordering in objects and maps
   - Lighter-weight output than JSON (less syntactic noise by default).
     - Tries not to quote keys in objects. I.e. `{ a: 1 }` instead of `{ "a": 1 }`
     - Uses single quotes instead of double quotes for strings
@@ -45,7 +44,8 @@ Outputs:
 
   - `wrapWidth` (default: `120`) - how far a line will go before it wraps. A value of `0` means it will wrap as soon as possible on each line.
   - `indentSize` (default: `2`) - amount to indent each level
-  - `baseIndent` (default: `0`) - amount to indent the root level
+  - `baseIndent` (default: `0`) - Amount to indent the root level, except the first line which must be indented
+    externally if the need requires
 
 ## Customization: `block`
 
