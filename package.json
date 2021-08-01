@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/microvium/stringify-structured.git"
+    "url": "git+https://github.com/coder-mike/stringify-structured.git"
   },
   "keywords": [
     "stringify",
@@ -20,9 +20,9 @@
   "author": "Michael Hunter",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/microvium/stringify-structured/issues"
+    "url": "https://github.com/coder-mike/stringify-structured/issues"
   },
-  "homepage": "https://github.com/microvium/stringify-structured#readme",
+  "homepage": "https://github.com/coder-mike/stringify-structured#readme",
   "devDependencies": {
     "mocha": "^9.0.3",
     "typescript": "^4.3.5"
