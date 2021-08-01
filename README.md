@@ -15,7 +15,7 @@ A customizable stringification algorithm for POD data.
   - **Easy to customize** the output syntax of individual values in the tree in-place (without needing a "replacer function")
   - Opinionated wrapping and indentation rules (tries to fill up a given output width instead of putting everything on a new line)
 
-The customization is a key reason why I created this library. You can start out using `stringify` directly on a POD structure to get a dump of its contents (e.g. for debug output or unit test artifacts), and then you can _incrementally_ customize how certain values are displayed to improve the output structure over time.
+The customizability is a key reason why I created this library. You have a lot of control over the output syntax (allowing for readable output syntax for custom types and substructures), but the sensible defaults mean that getting started with the library is as simple as calling `stringify` directly on a POD value and then syntax customization can be done incrementally.
 
 Limitations:
 
