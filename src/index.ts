@@ -119,11 +119,7 @@ function isObject(value: any): boolean {
 function objectLike(keyValuePairs: Iterable<any[]>): Stringifiable {
   return block`{ ${
     list(', ', [...keyValuePairs].map(([k, v]) =>
-      inline`${
-        text`${stringifyKey(k)}`
-      }: ${
-        v
-      }`),
+      inline`${renderKey(k)}: ${v}`),
       { sort: true }
     )
   } }`;
@@ -368,6 +364,10 @@ export function stringifyKey(value: any): string {
     default:
       return '[<unknown>]'
   }
+}
+
+export function renderKey(value: any): Stringifiable {
+  return text`${stringifyKey(value)}`;
 }
 
 export function defaultFormatter(value: any): Stringifiable {
