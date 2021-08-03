@@ -1,4 +1,4 @@
-const { stringify, list, block, inline, text } = require('..');
+const { stringify, list, block, inline, text, stringifyString } = require('..');
 const assert = require('assert');
 
 const stringifyExpanded = value => stringify(value, { wrapWidth: 0 })
@@ -328,5 +328,16 @@ describe('replacer', function() {
     const replacer = o => o instanceof Date ? inline`date ${o.toISOString()}` : o;
     assert.strictEqual(stringify(value, { replacer }),
       `[[date '2021-08-01T05:21:18.394Z']]`);
+  })
+})
+
+describe('stringifyString', function() {
+  it('stringifyString', function() {
+    assert.strictEqual(stringifyString('x'), "'x'");
+    assert.strictEqual(stringifyString(`\tx`), String.raw`'\tx'`);
+    assert.strictEqual(stringifyString(`\nx`), String.raw`'\nx'`);
+    assert.strictEqual(stringifyString(`\0x`), String.raw`'\0x'`);
+    assert.strictEqual(stringifyString(`'x'`), String.raw`'\'x\''`);
+    assert.strictEqual(stringifyString(`"x"`), String.raw`'"x"'`);
   })
 })

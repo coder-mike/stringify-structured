@@ -138,20 +138,24 @@ function spaceWithLength(n: number): string {
 }
 
 const escapeSubstitutes = {
-  '\0': '\\0',
-  '\b': '\\b',
-  '\f': '\\f',
-  '\n': '\\n',
-  '\r': '\\r',
-  '\t': '\\t',
-  '\v': '\\v',
-  '\\': '\\\\',
-  '\'': '\\t'
+  '\0': String.raw`\0`,
+  '\b': String.raw`\b`,
+  '\f': String.raw`\f`,
+  '\n': String.raw`\n`,
+  '\r': String.raw`\r`,
+  '\t': String.raw`\t`,
+  '\v': String.raw`\v`,
+  '\\': String.raw`\\`,
+  '\'': String.raw`\'`
 }
 
-export function stringifyStringLiteral(s: string): string {
+export function stringifyString(s: string): string {
   // Single-quoted escape
   return `'${s.replace(/\0|\x08|\f|\n|\r|\t|\v|\\|\'/g, s => escapeSubstitutes[s])}'`;
+}
+
+export function renderStringLiteral(s: string): Stringifiable {
+  return text`${stringifyString}`;
 }
 
 export function text(strings: TemplateStringsArray, ...interpolations: any[]): Stringifiable {
@@ -339,7 +343,13 @@ function isNameString(name: string): boolean {
   return /^[a-zA-Z_]+[a-zA-Z0-9_]*$/.test(name);
 }
 
-function stringifyKey(value: any): string {
+/**
+ * Stringify a key in a key-value pair. Omits quotes on name strings.
+ *
+ * This doesn't do a full recursive stringification because generally keys are
+ * used for their identity rather than their content, and most keys are strings.
+ */
+export function stringifyKey(value: any): string {
   switch (typeof value) {
     case 'undefined': return '[undefined]';
     case 'function': return '[<function>]';
@@ -349,8 +359,8 @@ function stringifyKey(value: any): string {
     case 'bigint': return `[${value}]`;
     case 'string':
       return isNameString(value)
-      ? value
-      : stringifyStringLiteral(value);
+        ? value
+        : stringifyString(value);
     case 'object': {
       if (value === null) return 'null';
       return '[<object>]';
@@ -367,7 +377,7 @@ export function defaultFormatter(value: any): Stringifiable {
     case 'symbol': return text`${value}`;
     case 'number': return text`${value}`;
     case 'bigint': return text`${value}`;
-    case 'string': return text`${stringifyStringLiteral(value)}`;
+    case 'string': return text`${stringifyString(value)}`;
     case 'function':
     case 'object': {
       if (value === null) return text`null`;
