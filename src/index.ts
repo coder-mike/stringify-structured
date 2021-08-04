@@ -62,7 +62,7 @@ export interface RenderResult {
 }
 
 export function stringify(value: any, opts?: StringifyOpts): string {
-  const wrapWidth = opts?.wrapWidth ?? 120;
+  const wrapWidth = opts?.wrapWidth ?? 80;
 
   const indentIncrement = typeof opts?.indentIncrement === 'string'
     ? opts?.indentIncrement
@@ -294,6 +294,7 @@ export function list(
   opts?: {
     sort?: boolean,
     multiLineJoiner?: string,
+    skipEmpty?: boolean,
   }
 ): Stringifiable {
   const result: Stringifiable = {
@@ -301,9 +302,13 @@ export function list(
     [stringifySymbol](params): RenderResult {
       const { wrapWidth, render, indent } = params;
 
-      const renderedItems = [...items].map(x => render(x, params));
+      let renderedItems = [...items].map(x => render(x, params));
       if (opts?.sort) {
         renderedItems.sort((a, b) => a.content > b.content ? 1 : a.content === b.content ? 0 : -1);
+      }
+
+      if (opts?.skipEmpty) {
+        renderedItems = renderedItems.filter(r => !isWhitespace(r.content));
       }
 
       const singleLineLength =
@@ -423,4 +428,8 @@ function interpolate(strings: Iterable<string>, ...interpolations: string[]): st
   }
 
   return s;
+}
+
+function isWhitespace(s: string) {
+  return /^\s*$/.test(s);
 }

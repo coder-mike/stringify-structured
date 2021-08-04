@@ -174,6 +174,18 @@ describe('list', function () {
 
       44`);
   });
+
+  it('skipEmpty', function() {
+    const list1 = list(', ', [42, text` `, 44], { skipEmpty: true });
+    const list2 = list(', ', [42, list(';', []), 44], { skipEmpty: true, multiLineJoiner: '\n' });
+    assert.strictEqual(stringifyIndented(list1),
+      `42,
+      44`);
+    assert.strictEqual(stringifyIndented(list2),
+      `42
+
+      44`);
+  });
 })
 
 describe('inline', function() {
